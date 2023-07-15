@@ -15,25 +15,32 @@ dirigera_hub = dirigera.Hub(
     # port=os.getenv('DIRIGERA_PORT')
 )
 
-BUFFER_FILE = "buffer.json"
-MAX_PROMPTS = 50
+BUFFER_FILE_NAME = os.getenv('BUFFER_FILE_NAME', 'buffer')
+BUFFER_MAX_SIZE_FORMAT = os.getenv('BUFFER_MAX_SIZE_FORMAT', 'NOP')
+BUFFER_MAX_SIZE = int(os.getenv('BUFFER_MAX_SIZE', '50'))
+BUFFER_REMOVE_WHEN_MAX = int(os.getenv('BUFFER_REMOVE_WHEN_MAX', '10'))
 
 def load_buffer():
-    if os.path.exists(BUFFER_FILE):
-        with open(BUFFER_FILE, 'r') as f:
+    if os.path.exists(f"{BUFFER_FILE_NAME}.json"):
+        with open(f"{BUFFER_FILE_NAME}.json", 'r') as f:
             return json.load(f)
     return {}
 
 def save_buffer(buffer):
-    with open(BUFFER_FILE, 'w') as f:
+    with open(f"{BUFFER_FILE_NAME}.json", 'w') as f:
         json.dump(buffer, f)
 
 def add_prompt_to_buffer(prompt, output):
     buffer = load_buffer()
     buffer[prompt] = output
-    if len(buffer) > MAX_PROMPTS:
+    if BUFFER_MAX_SIZE_FORMAT == 'NOP' and len(buffer) > BUFFER_MAX_SIZE:
         oldest_prompt = next(iter(buffer))
         del buffer[oldest_prompt]
+    elif BUFFER_MAX_SIZE_FORMAT in ['B', 'KB', 'MB', 'GB', 'TB']:
+        if len(json.dumps(buffer)) > convert_to_bytes(BUFFER_MAX_SIZE, BUFFER_MAX_SIZE_FORMAT):
+            for _ in range(BUFFER_REMOVE_WHEN_MAX):
+                oldest_prompt = next(iter(buffer))
+                del buffer[oldest_prompt]
     save_buffer(buffer)
 
 def get_output_from_buffer(prompt):
@@ -42,6 +49,20 @@ def get_output_from_buffer(prompt):
 
 def format_prompt_output(prompt, output):
     return f'"{prompt}": "{output}"'
+
+def convert_to_bytes(size, format):
+    if format == 'B':
+        return size
+    elif format == 'KB':
+        return size * 1024
+    elif format == 'MB':
+        return size * 1024 * 1024
+    elif format == 'GB':
+        return size * 1024 * 1024 * 1024
+    elif format == 'TB':
+        return size * 1024 * 1024 * 1024 * 1024
+    else:
+        return size
 
 def process_prompt(prompt):
     output = get_output_from_buffer(prompt)
@@ -69,6 +90,6 @@ def process_prompt(prompt):
     return format_prompt_output(prompt, output)
 
 # Example usage
-prompt = "hi"
+prompt = "make a morning routine for bedroom"
 formatted_output = process_prompt(prompt)
 print(formatted_output)
